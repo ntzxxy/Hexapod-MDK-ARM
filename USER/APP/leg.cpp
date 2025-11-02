@@ -96,6 +96,32 @@ void Leg::read_angle(uint32_t id)
 	this->TX_Enable(); // 发送完毕后使能发送
 }
 
+// 阻塞式单舵机移动测试
+void Leg::move_single_servo_blocking_test(uint8_t servo_index)
+{
+    // 安全检查
+    if (servo_index > 2) 
+        return;
+
+    // 1. 准备单个舵机的命令数据包
+    // 将指定舵机的命令写入 send_buffer 的起始位置
+    this->servos[servo_index].move(this->send_buffer);
+
+    // 2. 启用发送，禁用接收（半双工切换）
+    this->TX_Enable();
+
+    // 3. 阻塞发送数据包
+    // SERVO_MOVE_TIME_WRITE_LEN (7) + 3 (头和ID/长度) = 10 字节
+    uint16_t packet_len = SERVO_MOVE_TIME_WRITE_LEN + 3; 
+    
+    // 使用 HAL_UART_Transmit (阻塞模式)
+    // 超时时间 1000ms
+    HAL_UART_Transmit(this->huart, this->send_buffer, packet_len, 1000);
+
+    // 4. 禁用发送，使能接收（切换回接收模式，准备接收或等待下一命令）
+    this->RX_Enable(); 
+}
+
 // 使能接收
 void Leg::RX_Enable()
 {

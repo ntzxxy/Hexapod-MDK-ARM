@@ -28,6 +28,11 @@ public:
 	void load();					// 上电
 	void unload();					// 掉电
 	void read_angle(uint32_t id);	// 读取舵机角度
+	void move_single_servo_blocking_test(uint8_t servo_index);	// 阻塞式单舵机移动测试
+	Servo& get_servo(uint8_t index) 
+    {
+        return this->servos[index];
+    }
 };
 
 #endif
