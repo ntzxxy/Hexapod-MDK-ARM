@@ -66,12 +66,13 @@ void value_limit(float &val, float min, float max)
         val = min;
 }
 
-PID::PID(float kp, float ki, float kd, Cir_mode cicir_moder)
+PID::PID(float kp, float ki, float kd, Cir_mode cir_mode)
 {
     this->kp = kp;
     this->ki = ki;
     this->kd = kd;
     this->cir_mode = cir_mode;
+		this->integral_sum = 0;
 }
 
 float PID::cal(float current_val, float set_val)
@@ -96,7 +97,8 @@ float PID::cal(float current_val, float set_val)
         break;
     }
     this->pout = this->kp * this->error[0]; // 比例项计算
-    this->iout = this->ki * this->error[0]; // 积分项计算
+		this->integral_sum += this->error[0];
+    this->iout = this->ki * this->integral_sum; // 积分项计算
     // 微分项计算
     this->Derror[2] = this->Derror[1];
     this->Derror[1] = this->Derror[0];
@@ -112,6 +114,7 @@ void PID::Init(float kp, float ki, float kd, Cir_mode cir_mode)
     this->ki = ki;
     this->kd = kd;
     this->cir_mode = cir_mode;
+		this->integral_sum = 0;
 }
 
 void First_order_filter::set_k_filter(float k_filter)

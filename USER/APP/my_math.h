@@ -55,6 +55,7 @@ private:
     float current_val;
     float set_val;
     Cir_mode cir_mode;
+    float integral_sum;
 
 public:
     PID(float kp, float ki, float kd, Cir_mode cir_mode);
