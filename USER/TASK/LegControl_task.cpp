@@ -58,12 +58,16 @@ extern "C"
 		osDelay(500); // 启动延时，让系统稳定
         
         float target_angle = PI / 4.0f; // 初始目标角度 45度
+				float target_angle2 = PI / 6.0f; // 初始目标角度 45度
+				float target_angle3 = PI / 2.0f; // 初始目标角度 45度
         uint16_t move_time = 500; 
 
 		while (1)
 		{
             // 切换 0度 和 45度 之间往复运动
             target_angle = (target_angle > 0.1f) ? 0.0f : (PI / 4.0f); 
+						target_angle2 = (target_angle2 > 0.1f) ? 0.0f : (PI / 6.0f); 
+						target_angle3 = (target_angle3 > 0.1f) ? 0.0f : (PI / 2.0f); 
             my_leg.set_time(move_time);
             
             // =========================================================================
@@ -73,23 +77,23 @@ extern "C"
             // --- 模式 A: 测试单个舵机 (Servo 0, ID 1) ---
             
             // 1. 仅设置第一个舵机 Coxa 的角度
-            my_leg.get_servo(0).set_angle(target_angle);
+            //my_leg.get_servo(0).set_angle(target_angle);
             
             // 2. 调用阻塞式单舵机发送函数 (您需要在 leg.cpp 中实现 move_single_servo_blocking_test)
-            my_leg.move_single_servo_blocking_test(0); 
+            //my_leg.move_single_servo_blocking_test(0); 
             
             
             // --- 模式 B: 测试整条腿 (三个舵机: Servo 0, 1, 2) ---
-						/*
+						
             // 1. 设置三个舵机的安全角度 (例如：Coxa, Femur 45度, Tibia -45度)
             test_thetas.angle[0] = target_angle; // 舵机 1
-            test_thetas.angle[1] = target_angle; // 舵机 2
-            test_thetas.angle[2] = -target_angle; // 舵机 3
+            test_thetas.angle[1] = target_angle2; // 舵机 2
+            test_thetas.angle[2] = -target_angle3; // 舵机 3
             my_leg.set_thetas(test_thetas); // 会调用 set_angle for all 3 servos
             
             // 2. 调用阻塞式三舵机发送函数 (原 leg.cpp 中已存在，使用 HAL_UART_Transmit)
             my_leg.move_UART(); 
-						*/
+						
             // =========================================================================
 
 			osDelay(1000); // 延时 1000ms 等待舵机完成动作

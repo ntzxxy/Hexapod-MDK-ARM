@@ -1,11 +1,12 @@
 #include "Servo.h"
 #include "gait_prg.h"
+#include "my_math.h"
 
 volatile uint8_t cmd_send_buffer[12] = {0x55, 0x55};
 
 void Servo::set_angle(float angle)
 {
-	this->angle = angle / PI * 750 + 500; // 将弧度转换为舵机值
+	this->angle = (uint16_t)(angle / PI * 750.0f + 500.0f); // 将弧度转换为舵机值
 }
 
 void Servo::set_time(uint16_t move_time)
