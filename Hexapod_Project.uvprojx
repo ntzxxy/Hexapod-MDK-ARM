@@ -1478,6 +1478,16 @@
               <FileType>8</FileType>
               <FilePath>.\USER\APP\my_math.cpp</FilePath>
             </File>
+            <File>
+              <FileName>gait_prg.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>.\USER\APP\gait_prg.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>debug_uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\USER\APP\debug_uart.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

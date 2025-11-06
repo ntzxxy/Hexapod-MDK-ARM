@@ -3,7 +3,8 @@
 #include <cmath>
 #include "remote.h"
 #include "my_math.h"
-#include "arm_math.h"
+#include "string.h"
+//#include "arm_math.h"
 using namespace std;
 
 // 全局变量
@@ -11,7 +12,7 @@ extern uint32_t LegControl_round; // 控制回合
 
 // 函数
 static Position3 fkine(Thetas thetas);
-static Thetas ikine(Position3 &pos);
+Thetas ikine(Position3 &pos);
 
 void Gait_prg::Init()
 {
@@ -48,7 +49,7 @@ static Position3 fkine(Thetas thetas)
 /*
  * 逆运动解算
  */
-static Thetas ikine(Position3 &pos)
+Thetas ikine(Position3 &pos)
 {
     static Position3 pos1;
     static float R, Lr, alpha_r, alpha1, alpha2;

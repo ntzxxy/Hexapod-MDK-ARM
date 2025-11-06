@@ -70,4 +70,6 @@ public:
     void set_velocity(Velocity &velocity);
 };
 
+Thetas ikine(Position3 &pos);
+
 #endif
