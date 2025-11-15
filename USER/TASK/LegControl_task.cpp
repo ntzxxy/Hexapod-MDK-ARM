@@ -40,7 +40,13 @@ void Minimal_Test_Init(void)
 {
     // C++ 对象构造：将 Leg 对象与 USART1 句柄关联
     my_leg = Leg(&huart1);
+		Thetas calibration_offset(
+        0.0f,                                   // Coxa (J0): 0度
+        11.85f * PI / 180.0f,                    // Femur (J1): +5.85度校准 (弧度)
+        7.47f * PI / 180.0f                     // Tibia (J2): +3.47度校准 (弧度)
+    ); 
 
+    my_leg.set_cal_offset(calibration_offset); // <<< 关键：应用校准偏移
 		gait_prg.Init();
 	
 		test_velocity.Vx = 30.0f; // 假设 30 mm/s 前进速度
@@ -73,13 +79,13 @@ extern "C"
 
 		osDelay(500); // 启动延时，让系统稳定
         
-        //float target_angle = PI / 4.0f; // 初始目标角度 45度
-				//float target_angle2 = PI / 6.0f; // 初始目标角度 45度
-				//float target_angle3 = PI / 2.0f; // 初始目标角度 45度
-        //uint16_t move_time = 500; 
+        float target_angle = PI / 6.0f; // 初始目标角度 45度
+				float target_angle2 = PI / 9.0f * 2.0f; // 初始目标角度 45度
+				float target_angle3 = -PI / 2.0f; // 初始目标角度 45度
+        uint16_t move_time = 500; 
 		
 				// 定义腿末端目标位置（相对于腿起始端，单位mm）
-        Position3 target_pos(150.0f, 0.0f, -100.0f); 
+        Position3 target_pos(170.0f, 0.0f, -100.0f); 
         
         // 存储逆解结果
         Thetas solved_thetas;
@@ -87,10 +93,8 @@ extern "C"
 		while (1)
 		{
             // 切换 0度 和 45度 之间往复运动
-            //target_angle = (target_angle > 0.1f) ? 0.0f : (PI / 4.0f); 
-						//target_angle2 = (target_angle2 > 0.1f) ? 0.0f : (PI / 6.0f); 
-						//target_angle3 = (target_angle3 > 0.1f) ? 0.0f : (PI / 2.0f); 
-            //my_leg.set_time(move_time);
+						
+            my_leg.set_time(move_time);
             
             // =========================================================================
             // 模式选择：取消注释您要测试的模式 (请务必确保只选择一种模式)
@@ -110,11 +114,11 @@ extern "C"
             // 1. 设置三个舵机的安全角度 (例如：Coxa, Femur 45度, Tibia -45度)
             //test_thetas.angle[0] = target_angle; // 舵机 1
             //test_thetas.angle[1] = target_angle2; // 舵机 2
-            //test_thetas.angle[2] = -target_angle3; // 舵机 3
+            //test_thetas.angle[2] = target_angle3; // 舵机 3
             //my_leg.set_thetas(test_thetas); // 会调用 set_angle for all 3 servos
             
             // 2. 调用阻塞式三舵机发送函数 (原 leg.cpp 中已存在，使用 HAL_UART_Transmit)
-            //my_leg.move_UART(); 
+           // my_leg.move_UART(); 
 						
             // =========================================================================
 
@@ -131,7 +135,9 @@ extern "C"
 						osDelay(1000);
             APP_PRINT("  T%.2f\r\n", solved_thetas.angle[2] * 180.0f / PI);
 						osDelay(1000);
-
+						
+						my_leg.set_thetas(solved_thetas);
+						my_leg.move_UART();
             // ------------------------------------------------
             // 步骤 3: 验证是否在安全范围内
             // ------------------------------------------------

@@ -13,6 +13,7 @@ private:
 	Thetas theta;
 	Servo_Broad_Cast servo_broad_cast;
 	UART_HandleTypeDef *huart;
+	Thetas cal_offset;
 	void TX_Enable();
 	void RX_Enable();
 	void TX_Unable();
@@ -20,6 +21,7 @@ public:
 	Leg(UART_HandleTypeDef *huart); // 构造函数
 	Leg(){};						// 无参构造
 	void set_thetas(Thetas thetas); // 设置机械腿的角度
+	void set_cal_offset(Thetas offset);
 	void set_time(uint16_t tims);	// 设置机械腿移动的时间
 	void move_DMA();					// 机械腿移动命令
 	void move_UART();

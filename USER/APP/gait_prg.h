@@ -31,6 +31,8 @@
 
 #define K_W (1.0f/56.56854f) // 1/|B|_max
 
+#define TIBIA_CENTER_OFFSET -(17.0f / 36.0f) * PI
+
 class Velocity
 {
 public:

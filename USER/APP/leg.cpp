@@ -1,4 +1,5 @@
 #include "leg.h"
+#include "gait_prg.h"
 #include "stdlib.h"
 #include "cmsis_os.h"
 #include "main.h"
@@ -16,14 +17,25 @@ Leg::Leg(UART_HandleTypeDef *huart)
 	servos[2] = Servo(3);
 }
 
+void Leg::set_cal_offset(Thetas offset) 
+{ 
+	this->cal_offset = offset; 
+}
+
 void Leg::set_thetas(Thetas theta)
 {
 	this->theta.angle[0] = theta.angle[0];
 	this->theta.angle[1] = theta.angle[1];
 	this->theta.angle[2] = theta.angle[2];
-	this->servos[0].set_angle(theta.angle[0]);
-	this->servos[1].set_angle(theta.angle[1]);
-	this->servos[2].set_angle(theta.angle[2]);
+	// 舵机 0 (Coxa): IK角度 + 机械校准偏移
+	float angle_0_cmd = theta.angle[0] + this->cal_offset.angle[0];
+  // 舵机 1 (Femur): IK角度 + 机械校准偏移 (+5.85度)
+	float angle_1_cmd = theta.angle[1] + this->cal_offset.angle[1];
+  // 舵机 2 (Tibia): IK角度 + 机械校准偏移 (+3.47度) - Tibia中心偏移 (-85度)
+	float angle_2_cmd = theta.angle[2] + this->cal_offset.angle[2] - TIBIA_CENTER_OFFSET;
+	this->servos[0].set_angle(angle_0_cmd);
+	this->servos[1].set_angle(angle_1_cmd);
+	this->servos[2].set_angle(angle_2_cmd);
 }
 
 void Leg::set_time(uint16_t move_time)
