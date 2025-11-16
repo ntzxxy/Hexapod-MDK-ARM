@@ -129,15 +129,15 @@ extern "C"
             // 步骤 2: 打印解算结果（将弧度转换为角度方便验证）
             // ------------------------------------------------
             //APP_PRINT("IKINE Solved Angles:\r\n");
-            APP_PRINT("  C%.2f\r\n", solved_thetas.angle[0] * 180.0f / PI);
-						osDelay(1000);
-            APP_PRINT("  F%.2f\r\n", solved_thetas.angle[1] * 180.0f / PI);
-						osDelay(1000);
-            APP_PRINT("  T%.2f\r\n", solved_thetas.angle[2] * 180.0f / PI);
-						osDelay(1000);
+            //APP_PRINT("  C%.2f\r\n", solved_thetas.angle[0] * 180.0f / PI);
+						//osDelay(1000);
+            //APP_PRINT("  F%.2f\r\n", solved_thetas.angle[1] * 180.0f / PI);
+						//osDelay(1000);
+            //APP_PRINT("  T%.2f\r\n", solved_thetas.angle[2] * 180.0f / PI);
+						//osDelay(1000);
 						
-						my_leg.set_thetas(solved_thetas);
-						my_leg.move_UART();
+						//my_leg.set_thetas(solved_thetas);
+						//my_leg.move_UART();
             // ------------------------------------------------
             // 步骤 3: 验证是否在安全范围内
             // ------------------------------------------------
