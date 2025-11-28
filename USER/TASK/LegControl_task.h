@@ -57,7 +57,15 @@ typedef enum
     MPU_OFF,
 }MPU_SW_e;
 
+typedef enum {
+    MODE_IDLE,          
+    MODE_IK_TEST,       
+    MODE_RESET_ZERO,    
+    MODE_SINGLE_DEBUG   
+} ControlMode_t;
 
+extern ControlMode_t current_mode;
+extern Position3 target_pos;
 
 class Hexapod
 {
