@@ -5,6 +5,7 @@
 #include "main.h"
 #include "usart.h"
 #include "bsp.h"
+#include "debug_uart.h"
 
 
 uint8_t receive_buffer[100];
@@ -33,6 +34,18 @@ void Leg::set_thetas(Thetas theta)
 	float angle_1_cmd = theta.angle[1] + this->cal_offset.angle[1];
   // 舵机 2 (Tibia): IK角度 + 机械校准偏移 (+3.47度) - Tibia中心偏移 (-85度)
 	float angle_2_cmd = theta.angle[2] + this->cal_offset.angle[2] - TIBIA_CENTER_OFFSET;
+	//串口调试信息
+	if (this->huart->Instance == USART2) 
+    {
+        // 将弧度转换为角度，方便肉眼判断
+        float deg0 = theta.angle[0] * 180.0f / PI;
+        float deg1 = theta.angle[1] * 180.0f / PI;
+        float deg2 = theta.angle[2] * 180.0f / PI;
+
+        // 打印格式：[目标] J0(Coxa), J1(Femur), J2(Tibia)
+        APP_PRINT("TGT: %.2f, %.2f, %.2f\r\n", deg0, deg1, deg2);
+    }
+	
 	this->servos[0].set_angle(angle_0_cmd);
 	this->servos[1].set_angle(angle_1_cmd);
 	this->servos[2].set_angle(angle_2_cmd);

@@ -15,10 +15,7 @@ extern "C"
     while (1)
     {
       mpu6050.dmp_get_data();
-			APP_PRINT("MPU: Pitch=%.2f, Roll=%.2f, Yaw=%.2f \r\n", 
-                mpu6050.angle.x, 
-                mpu6050.angle.y, 
-                mpu6050.angle.z);
+			//APP_PRINT("MPU: Pitch=%.2f, Roll=%.2f, Yaw=%.2f \r\n", mpu6050.angle.x, mpu6050.angle.y, mpu6050.angle.z);
       osDelay(10);
     }
   }

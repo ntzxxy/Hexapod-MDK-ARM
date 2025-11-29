@@ -6,8 +6,8 @@
 #include "remote.h"
 #include "gait_prg.h"
 
-#define LEG_JOINT2_OFFSET PI / 2
-#define LEG_JOINT3_OFFSET -2 * PI / 9
+#define LEG_JOINT2_OFFSET 0
+#define LEG_JOINT3_OFFSET 0
 
 #define HEXAPOD_MIN_HEIGHT -70.0f
 #define HEXAPOD_MAX_HEIGHT 70.0f
@@ -59,7 +59,8 @@ typedef enum
 
 typedef enum {
     MODE_IDLE,          
-    MODE_IK_TEST,       
+    MODE_IK_TEST,
+		MODE_GAIT_RUN,	
     MODE_RESET_ZERO,    
     MODE_SINGLE_DEBUG   
 } ControlMode_t;

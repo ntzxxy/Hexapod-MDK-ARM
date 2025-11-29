@@ -22,6 +22,7 @@ void LCD_Task(void const * argument)
         switch(current_mode) {
             case MODE_IDLE:         mode_str = "IDLE"; break;
             case MODE_IK_TEST:      mode_str = "IK"; break;
+						case MODE_GAIT_RUN:     mode_str = "GAIT"; break;
             case MODE_RESET_ZERO:   mode_str = "RESET"; break;
             case MODE_SINGLE_DEBUG: mode_str = "DEBUG"; break;
             default:                mode_str = "UNKNOWN"; break;
@@ -38,10 +39,10 @@ void LCD_Task(void const * argument)
 				LCD_ShowString(4, 40, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
 				
 				std::snprintf(buffer, sizeof(buffer), "Mode:%s", mode_str);
-        LCD_ShowString(30, 4, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+        LCD_ShowString(70, 4, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
 				
-				std::snprintf(buffer, sizeof(buffer), "Tgt-Z:%6.1f", target_pos.z);
-        LCD_ShowString(30, 22, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+				std::snprintf(buffer, sizeof(buffer), "Z%6.1f", target_pos.z);
+        LCD_ShowString(70, 22, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
 				
 			
 				//sprintf((char *)&text, "WeAct Studio");
