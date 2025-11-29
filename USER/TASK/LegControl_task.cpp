@@ -12,7 +12,6 @@
 #include "debug_uart.h"
 #include "mpu6050.h"
 
-
 using namespace std;
 
 extern osMessageQId KeyQueueHandle;
@@ -98,7 +97,7 @@ extern "C"
 		hexapod.legs[1].set_cal_offset(leg1_cal_offset);
 		DWT_Delay_Init();
 		osDelay(300); // 启动延时，让系统稳定
-		
+		hexapod.starting_pose();
 		
 		static uint32_t code_time_start, code_time_end, code_time; // 用于计算程序运行时间，保证程序隔一段时间跑一遍
 	      
@@ -163,60 +162,7 @@ extern "C"
                     // 归零逻辑...
                     break;
             }
-            // 切换 0度 和 45度 之间往复运动
-						
-            //my_leg.set_time(move_time);
             
-            // =========================================================================
-            // 模式选择：取消注释您要测试的模式 (请务必确保只选择一种模式)
-            // =========================================================================
-            
-            // --- 模式 A: 测试单个舵机 (Servo 0, ID 1) ---
-            
-            // 1. 仅设置第一个舵机 Coxa 的角度
-            //my_leg.get_servo(0).set_angle(target_angle);
-            
-            // 2. 调用阻塞式单舵机发送函数 (您需要在 leg.cpp 中实现 move_single_servo_blocking_test)
-            //my_leg.move_single_servo_blocking_test(0); 
-            
-            
-            // --- 模式 B: 测试整条腿 (三个舵机: Servo 0, 1, 2) ---
-						
-            // 1. 设置三个舵机的安全角度 (例如：Coxa, Femur 45度, Tibia -45度)
-            //test_thetas.angle[0] = target_angle; // 舵机 1
-            //test_thetas.angle[1] = target_angle2; // 舵机 2
-            //test_thetas.angle[2] = target_angle3; // 舵机 3
-            //my_leg.set_thetas(test_thetas); // 会调用 set_angle for all 3 servos
-            
-            // 2. 调用阻塞式三舵机发送函数 (原 leg.cpp 中已存在，使用 HAL_UART_Transmit)
-           // my_leg.move_UART(); 
-						
-            // =========================================================================
-
-
-						//solved_thetas = ikine(target_pos);
-            
-            // ------------------------------------------------
-            // 步骤 2: 打印解算结果（将弧度转换为角度方便验证）
-            // ------------------------------------------------
-            //APP_PRINT("IKINE Solved Angles:\r\n");
-            //APP_PRINT("  C%.2f\r\n", solved_thetas.angle[0] * 180.0f / PI);
-						//osDelay(1000);
-            //APP_PRINT("  F%.2f\r\n", solved_thetas.angle[1] * 180.0f / PI);
-						//osDelay(1000);
-            //APP_PRINT("  T%.2f\r\n", solved_thetas.angle[2] * 180.0f / PI);
-						//osDelay(1000);
-						
-						//my_leg.set_thetas(solved_thetas);
-						//my_leg.move_UART();
-            // ------------------------------------------------
-            // 步骤 3: 验证是否在安全范围内
-            // ------------------------------------------------
-            // 舵机角度范围大致在 -120度到120度之间
-            //if (solved_thetas.angle[0] == 0.0f && solved_thetas.angle[1] == 0.0f && solved_thetas.angle[2] == 0.0f)
-            //{
-                //APP_PRINT("WARNING\r\n");
-            //}
 						if (is_dirty) {
 								Thetas solved = ikine(target_pos);
 								my_leg.set_thetas(solved);
@@ -247,7 +193,7 @@ void key_deal(void)
             case 2: // 按键2: 前进
                 current_mode = MODE_GAIT_RUN;
                 hexapod.velocity.Vx = 0.0f;
-								hexapod.velocity.Vy = 30.0f;
+								hexapod.velocity.Vy = 20.0f;
                 break;
             case 3: // Key3: 进入单腿调试模式
                 current_mode = MODE_IK_TEST;
@@ -293,6 +239,30 @@ void Hexapod::Init(void)
 	body_angle_fof[0].set_k_filter(BODY_ANGLE_FOF_K);
 	body_angle_fof[1].set_k_filter(BODY_ANGLE_FOF_K);
 	body_angle_fof[2].set_k_filter(BODY_ANGLE_FOF_K);
+}
+
+void Hexapod::starting_pose()
+{   
+    // 1. 设定慢速 (2秒)
+    for(int i=0; i<6; i++) {
+        legs[i].set_time(2000);
+    }
+    
+    // 2. 发送站立角度 (注意：这里用的是你的宏定义)
+    float std_femur = 40.0f * PI / 180.0f;   
+    float std_tibia = -110.0f * PI / 180.0f; 
+
+    for(int i=0; i<6; i++) {
+        // 计算目标角度：标准站立姿态 - 修正后的偏移量
+        // 这样可以确保无论你刚才怎么改 offset，这里都是让它去物理上的“站立位”
+        Thetas stand_target(0.0f - leg_offset[i].angle[0], std_femur - leg_offset[i].angle[1], std_tibia - leg_offset[i].angle[2]);
+        legs[i].set_thetas(stand_target);
+        legs[i].move_DMA();
+        osDelay(10); // 稍微错开，防止电源冲击
+    }
+    
+    // 3. 必须等待动作完成
+    osDelay(2500); 
 }
 
 // 计算机器人速度

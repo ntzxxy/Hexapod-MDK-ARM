@@ -35,7 +35,7 @@ void Leg::set_thetas(Thetas theta)
   // 舵机 2 (Tibia): IK角度 + 机械校准偏移 (+3.47度) - Tibia中心偏移 (-85度)
 	float angle_2_cmd = theta.angle[2] + this->cal_offset.angle[2] - TIBIA_CENTER_OFFSET;
 	//串口调试信息
-	if (this->huart->Instance == USART2) 
+	if (this->huart->Instance == USART1) 
     {
         // 将弧度转换为角度，方便肉眼判断
         float deg0 = theta.angle[0] * 180.0f / PI;

@@ -85,7 +85,8 @@ public:
     First_order_filter body_pos_fof[3];
     First_order_filter body_angle_fof[3];
     bool mpu_flag;
-    void Init();          
+    void Init();
+		void starting_pose();
     void velocity_cal(const RC_remote_data_t &remote_data);
     void body_position_cal(const RC_remote_data_t &remote_data);
     void body_angle_cal(const RC_remote_data_t &remote_data);
