@@ -34,8 +34,8 @@ void Debug_UART_Callback(UART_HandleTypeDef *huart)
  */
 void Debug_UART_print(uint8_t *str, int bytes)
 {
-	// HAL_UART_Transmit(&DEBUG_UART_h, str, bytes, 0xffff);
-	HAL_UART_Transmit_DMA(&DEBUG_UART_h, str, bytes);
+	 HAL_UART_Transmit(&DEBUG_UART_h, str, bytes, 0xffff);
+	//HAL_UART_Transmit_DMA(&DEBUG_UART_h, str, bytes);
 }
 
 // ÷ÿ∂®œÚfputc

@@ -9,8 +9,8 @@
 #define LEG_JOINT2_OFFSET 0
 #define LEG_JOINT3_OFFSET 0
 
-#define HEXAPOD_MIN_HEIGHT -70.0f
-#define HEXAPOD_MAX_HEIGHT 70.0f
+#define HEXAPOD_MIN_HEIGHT -10.0f
+#define HEXAPOD_MAX_HEIGHT 10.0f
 #define HEXAPOD_MIN_X -40.0f
 #define HEXAPOD_MAX_X 40.0f
 #define HEXAPOD_MIN_Y -40.0f
@@ -49,6 +49,7 @@ typedef enum
     HEXAPOD_MOVE,
     HEXAPOD_BODY_ANGEL_CONTROL,
     HEXAPOD_BODY_POS_CONTROL,
+		HEXAPOD_LOCK,
 } Hexapod_mode_e;
 
 typedef enum
@@ -62,11 +63,21 @@ typedef enum {
     MODE_IK_TEST,
 		MODE_GAIT_RUN,	
     MODE_RESET_ZERO,    
-    MODE_SINGLE_DEBUG   
+    MODE_SINGLE_DEBUG,
+		MODE_ACTION_TEACH
 } ControlMode_t;
+
+typedef enum {
+    UI_MODE_MOVEMENT = 0,   // 运动控制模式 (行走、姿态)
+    UI_MODE_TEACHING,       // 示教模式 (掉电、录制、上电)
+    UI_MODE_DEBUG,          // 单腿调试模式 (可选)
+		UI_MODE_REMOTE,
+    UI_MODE_MAX             // 用于循环计数
+} UIMode_t;
 
 extern ControlMode_t current_mode;
 extern Position3 target_pos;
+extern UIMode_t current_ui_mode;
 
 class Hexapod
 {
@@ -96,5 +107,10 @@ public:
 
 };
 
+extern Hexapod hexapod;
+extern uint8_t CALIB_LEG_INDEX;
+extern Position3 calib_target_pos;
+extern bool g_motor_power_on;
+extern uint32_t LegControl_round;
 
 #endif

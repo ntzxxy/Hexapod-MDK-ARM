@@ -156,17 +156,30 @@ void Gait_prg::CEN_and_pace_cal()
     else
         CEN.x = -sqrt(pow(module_CEN, 2) / (1 + pow(velocity.Vx, 2) / pow(velocity.Vy, 2)));
     // 计算步伐大小
-    float module_speed = pow(pow(velocity.Vx, 3) + pow(velocity.Vy, 3) + pow(velocity.omega, 3), 1.0f / 3);
+    float speed_sum_cubed = pow(velocity.Vx, 3) + pow(velocity.Vy, 3) + pow(velocity.omega, 3);
+    float direction_sign = (speed_sum_cubed >= 0) ? 1.0f : -1.0f;
+
+    // 2. 【修正】使用绝对值计算模长，彻底避开 pow 负数 Bug
+    // 先取绝对值再开三次方根，确保数值大小 100% 正确
+    float module_speed = pow(fabsf(speed_sum_cubed), 1.0f / 3.0f);
+
     if (module_speed > MAX_SPEED)
-        module_speed = MAX_SPEED; // 限制速度
-    R_pace = KR_2 * module_speed;
+        module_speed = MAX_SPEED; 
+
+    // 3. 【保留符号】将方向乘回 R_pace
+    // 这样 R_pace 既有了正确的大小（如 30），又保留了原本的负号（如 -30）
+    R_pace = direction_sign * KR_2 * module_speed;
     // 计算步伐时间
     if (R_pace > MAX_R_PACE)
         this->pace_time = 1000 / (R_pace / MAX_R_PACE); // 若超过最大步伐大小则缩小步伐时间
-    else
+		else if(R_pace < -MAX_R_PACE)
+				this->pace_time = 1000 / (-R_pace / MAX_R_PACE); // 若超过最大步伐大小则缩小步伐时间
+		else
         this->pace_time = 1000; // 若小于最大步伐大小则固定步伐时间
     if (R_pace > MAX_R_PACE)
         R_pace = MAX_R_PACE; // 限制步伐大小
+		else if (R_pace < -MAX_R_PACE) 
+				R_pace = -MAX_R_PACE;
     CEN.y = -CEN.x * velocity.Vx / velocity.Vy;
 }
 

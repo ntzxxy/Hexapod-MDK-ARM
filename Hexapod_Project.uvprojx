@@ -1793,6 +1793,11 @@
               <FileType>8</FileType>
               <FilePath>.\USER\APP\key.cpp</FilePath>
             </File>
+            <File>
+              <FileName>remote.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\USER\APP\remote.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

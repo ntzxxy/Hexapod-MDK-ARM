@@ -10,12 +10,13 @@
 
 uint8_t receive_buffer[100];
 
-Leg::Leg(UART_HandleTypeDef *huart)
+Leg::Leg(UART_HandleTypeDef *huart, uint8_t leg_id, uint8_t start_servo_id)
 {
 	this->huart = huart;
-	servos[0] = Servo(1);
-	servos[1] = Servo(2);
-	servos[2] = Servo(3);
+	this->leg_id = leg_id;
+	servos[0] = Servo(start_servo_id);
+  servos[1] = Servo(start_servo_id + 1);
+  servos[2] = Servo(start_servo_id + 2);
 }
 
 void Leg::set_cal_offset(Thetas offset) 
@@ -35,6 +36,7 @@ void Leg::set_thetas(Thetas theta)
   // 舵机 2 (Tibia): IK角度 + 机械校准偏移 (+3.47度) - Tibia中心偏移 (-85度)
 	float angle_2_cmd = theta.angle[2] + this->cal_offset.angle[2] - TIBIA_CENTER_OFFSET;
 	//串口调试信息
+	/*
 	if (this->huart->Instance == USART1) 
     {
         // 将弧度转换为角度，方便肉眼判断
@@ -45,6 +47,7 @@ void Leg::set_thetas(Thetas theta)
         // 打印格式：[目标] J0(Coxa), J1(Femur), J2(Tibia)
         APP_PRINT("TGT: %.2f, %.2f, %.2f\r\n", deg0, deg1, deg2);
     }
+	*/
 	
 	this->servos[0].set_angle(angle_0_cmd);
 	this->servos[1].set_angle(angle_1_cmd);
@@ -150,82 +153,93 @@ void Leg::move_single_servo_blocking_test(uint8_t servo_index)
 // 使能接收
 void Leg::RX_Enable()
 {
-	switch ((uint32_t)(this->huart->Instance))
-	{
-	case (uint32_t)USART1:
-		__LEG1_RXEN();
+	switch (this->leg_id)
+    {
+    case 0: // Leg 1
+        __LEG1_RXEN(); 
 		break;
-	case (uint32_t)USART2:
-		__LEG2_RXEN();
+    case 1: // Leg 2
+        __LEG2_RXEN(); 
 		break;
-	case (uint32_t)USART3:
-		__LEG3_RXEN();
+    case 2: // Leg 3
+        __LEG3_RXEN(); 
 		break;
-	case (uint32_t)UART4:
-		__LEG4_RXEN();
+    case 3: // Leg 4
+        __LEG4_RXEN(); 
 		break;
-	case (uint32_t)UART5:
-		__LEG5_RXEN();
+    case 4: // Leg 5
+        __LEG5_RXEN(); 
 		break;
-	case (uint32_t)USART6:
-		__LEG6_RXEN();
+    case 5: // Leg 6
+        __LEG6_RXEN(); 
 		break;
-	default:
+    default: 
 		break;
-	}
+    }
 }
 
 // 使能发送
 void Leg::TX_Enable()
 {
-	switch ((uint32_t)(this->huart->Instance))
+	switch (this->leg_id)
+    {
+    case 0: 
+			__LEG1_TXEN(); 
+		break;
+    case 1: 
+			__LEG2_TXEN(); 
+		break;
+    case 2: 
+			__LEG3_TXEN(); 
+		break;
+    case 3: 
+			__LEG4_TXEN(); 
+		break;
+    case 4: 
+			__LEG5_TXEN(); 
+		break;
+    case 5:
+			__LEG6_TXEN(); 
+		break;
+    default: 
+		break;
+    }
+}
+
+void Leg::TX_Unable()
+{
+	switch (this->leg_id)
 	{
-	case (uint32_t)USART1:
-		__LEG1_TXEN();
+	case 0:
+		__LEG1_TXUEN();
 		break;
-	case (uint32_t)USART2:
-		__LEG2_TXEN();
+	case 1:
+		__LEG2_TXUEN();
 		break;
-	case (uint32_t)USART3:
-		__LEG3_TXEN();
+	case 2:
+		__LEG3_TXUEN();
 		break;
-	case (uint32_t)UART4:
-		__LEG4_TXEN();
+	case 3:
+		__LEG4_TXUEN();
 		break;
-	case (uint32_t)UART5:
-		__LEG5_TXEN();
+	case 4:
+		__LEG5_TXUEN();
 		break;
-	case (uint32_t)USART6:
-		__LEG6_TXEN();
+	case 5:
+		__LEG6_TXUEN();
 		break;
 	default:
 		break;
 	}
 }
 
-void Leg::TX_Unable()
+void Leg::prepare_move_buffer()
 {
-	switch ((uint32_t)(this->huart->Instance))
-	{
-	case (uint32_t)USART1:
-		__LEG1_TXUEN();
-		break;
-	case (uint32_t)USART2:
-		__LEG2_TXUEN();
-		break;
-	case (uint32_t)USART3:
-		__LEG3_TXUEN();
-		break;
-	case (uint32_t)UART4:
-		__LEG4_TXUEN();
-		break;
-	case (uint32_t)UART5:
-		__LEG5_TXUEN();
-		break;
-	case (uint32_t)USART6:
-		__LEG6_TXUEN();
-		break;
-	default:
-		break;
-	}
+    // 只是填充 send_buffer 里的指令，绝对不要调用 HAL_UART_Transmit
+    // 3个舵机，每个10字节 (SERVO_MOVE_TIME_WRITE_LEN + 3 = 10)
+    uint8_t offset = SERVO_MOVE_TIME_WRITE_LEN + 3;
+    
+    this->servos[0].move(this->send_buffer);
+    this->servos[1].move(this->send_buffer + offset);
+    this->servos[2].move(this->send_buffer + offset * 2);
 }
