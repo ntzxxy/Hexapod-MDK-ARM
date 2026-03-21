@@ -134,8 +134,9 @@ private:
     uint8_t send_buffer[50]; //发送缓存
     uint8_t receive_buffer[200]; //接收缓存
     Position3 angular_v; //角速度
-    Position3 gyro_accel;  //角加速度
+    //Position3 gyro_accel;  //角加速度
     //Position3 angle; //角度，x即pitch，y即roll，z即yaw
+		Position3 gyro_offset;
     I2C_HandleTypeDef *hi2c;
     void I2C_Write(uint16_t MemAddress, uint8_t data);
     void I2C_Write(uint16_t MemAddress, uint8_t *str, uint8_t str_len);
@@ -144,10 +145,12 @@ private:
     void set_gyro_sampling_fre(uint32_t fre); //设置采样率；
 public:
 		 Position3 angle; //角度，x即pitch，y即roll，z即yaw
+		 Position3 gyro_accel;
      void Init(); //初始化
      void Read_Gyro(); //读取角度（给中断用）
-	 Position3 get_angle(); //读取角度（给用户使用）
+	   Position3 get_angle(); //读取角度（给用户使用）
      void dmp_get_data(); //读取dmp数据
+		 void Calibrate_Gyro();
 };
 
 

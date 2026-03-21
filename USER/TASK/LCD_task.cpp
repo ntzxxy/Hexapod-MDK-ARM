@@ -98,6 +98,15 @@ void LCD_Task(void const * argument)
 								
 								std::snprintf(buffer, sizeof(buffer), "L1:%3.0f %3.0f %4.0f", ang0, ang1, ang2);
 								LCD_ShowString(4, 40, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+								
+								const char* state_str;
+                switch(current_mode) {
+                    case MODE_IDLE: state_str = "IDLE"; break;
+                    case MODE_GAIT_RUN: state_str = "WALK"; break;
+                    default: state_str = "---"; break;
+                }
+                std::snprintf(buffer, sizeof(buffer), "%s", state_str);
+                LCD_ShowString(4, 58, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
                
                 break;
             }
@@ -120,6 +129,104 @@ void LCD_Task(void const * argument)
             {
                 // 1. 标题
                 LCD_ShowString(4, 4, ST7735Ctx.Width, 16, 16, (uint8_t*)"REMOTE");
+                
+                // 2. 显示当前状态机状态
+                const char* state_str;
+                switch(current_mode) {
+                    case MODE_IDLE: state_str = "IDLE"; break;
+                    case MODE_GAIT_RUN: state_str = "WALK"; break;
+                    default: state_str = "---"; break;
+                }
+                std::snprintf(buffer, sizeof(buffer), "%s", state_str);
+                LCD_ShowString(4, 22, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+
+                // 3. 显示 MPU 数据 (姿态)
+								std::snprintf(buffer, sizeof(buffer), "P%4.1f", mpu6050.angle.x);
+								LCD_ShowString(0, 40, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer); 
+
+								// --- 刷新 Roll ---
+								std::snprintf(buffer, sizeof(buffer), "R%4.1f", mpu6050.angle.y);
+								LCD_ShowString(50, 40, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+								
+								// --- 刷新 Yaw ---
+								std::snprintf(buffer, sizeof(buffer), "ROU%d", LegControl_round);
+								LCD_ShowString(100, 40, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+								
+								Thetas leg1_rad = hexapod.legs[0].get_current_thetas();
+				
+								float ang0 = leg1_rad.angle[0] * 180.0f / PI;
+								float ang1 = leg1_rad.angle[1] * 180.0f / PI;
+								float ang2 = leg1_rad.angle[2] * 180.0f / PI;
+								
+								std::snprintf(buffer, sizeof(buffer), "L1:%3.0f %3.0f %4.0f", ang0, ang1, ang2);
+								LCD_ShowString(4, 58, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+
+                
+                break;
+            }
+						case UI_MODE_BALANCE:
+            {
+                // 1. 标题
+                LCD_ShowString(4, 4, ST7735Ctx.Width, 16, 16, (uint8_t*)"BALANCE");
+                
+                // 2. 显示当前状态机状态
+                const char* state_str;
+                switch(current_mode) {
+                    case MODE_IDLE: state_str = "IDLE"; break;
+                    case MODE_BALANCE_TEST: state_str = "BALT"; break;
+                    default: state_str = "---"; break;
+                }
+                std::snprintf(buffer, sizeof(buffer), "%s", state_str);
+                LCD_ShowString(4, 22, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+
+                // 3. 显示 MPU 数据 (姿态)
+								std::snprintf(buffer, sizeof(buffer), "P%4.1f", mpu6050.angle.x);
+								LCD_ShowString(0, 40, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer); 
+
+								// --- 刷新 Roll ---
+								std::snprintf(buffer, sizeof(buffer), "R%4.1f", mpu6050.angle.y);
+								LCD_ShowString(50, 40, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+								
+								// --- 刷新 Yaw ---
+								std::snprintf(buffer, sizeof(buffer), "Y%4.1f", mpu6050.angle.z);
+								LCD_ShowString(100, 40, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+								
+								Thetas leg1_rad = hexapod.legs[0].get_current_thetas();
+				
+								float ang0 = leg1_rad.angle[0] * 180.0f / PI;
+								float ang1 = leg1_rad.angle[1] * 180.0f / PI;
+								float ang2 = leg1_rad.angle[2] * 180.0f / PI;
+								
+								std::snprintf(buffer, sizeof(buffer), "L1:%3.0f %3.0f %4.0f", ang0, ang1, ang2);
+								LCD_ShowString(4, 58, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+
+                
+                break;
+            }
+						
+						case UI_MODE_SHOW:
+            {
+                // 1. 标题
+                LCD_ShowString(4, 4, ST7735Ctx.Width, 16, 16, (uint8_t*)"SHOW");
+                 
+								
+								Thetas leg1_rad = hexapod.legs[0].get_current_thetas();
+				
+								float ang0 = leg1_rad.angle[0] * 180.0f / PI;
+								float ang1 = leg1_rad.angle[1] * 180.0f / PI;
+								float ang2 = leg1_rad.angle[2] * 180.0f / PI;
+								
+								std::snprintf(buffer, sizeof(buffer), "L1:%3.0f %3.0f %4.0f", ang0, ang1, ang2);
+								LCD_ShowString(4, 58, ST7735Ctx.Width, 16, 16, (uint8_t*)buffer);
+
+                
+                break;
+            }
+						
+						 case UI_MODE_AUTO:
+            {
+                // 1. 标题
+                LCD_ShowString(4, 4, ST7735Ctx.Width, 16, 16, (uint8_t*)"AUTO");
                 
                 // 2. 显示当前状态机状态
                 const char* state_str;

@@ -25,13 +25,13 @@
 #define HEXAPOD_MAX_Z_ROTATE 25.0f / 180 * PI  // 绕X轴旋转角度最大为 25度
 
 /*PID*/
-#define MPU_X_PID_KP 0.015f
+#define MPU_X_PID_KP 0.3f
 #define MPU_X_PID_KI 0.0f
-#define MPU_X_PID_KD 0.5f
+#define MPU_X_PID_KD 0.8f
 
-#define MPU_Y_PID_KP 0.015f
+#define MPU_Y_PID_KP 0.3f
 #define MPU_Y_PID_KI 0.0f
-#define MPU_Y_PID_KD 0.5f
+#define MPU_Y_PID_KD 0.8f
 
 
 /*FOF一阶低通滤波参数*/
@@ -64,7 +64,8 @@ typedef enum {
 		MODE_GAIT_RUN,	
     MODE_RESET_ZERO,    
     MODE_SINGLE_DEBUG,
-		MODE_ACTION_TEACH
+		MODE_ACTION_TEACH,
+		MODE_BALANCE_TEST
 } ControlMode_t;
 
 typedef enum {
@@ -72,6 +73,9 @@ typedef enum {
     UI_MODE_TEACHING,       // 示教模式 (掉电、录制、上电)
     UI_MODE_DEBUG,          // 单腿调试模式 (可选)
 		UI_MODE_REMOTE,
+		UI_MODE_BALANCE,
+		UI_MODE_SHOW,
+		UI_MODE_AUTO,
     UI_MODE_MAX             // 用于循环计数
 } UIMode_t;
 
@@ -112,5 +116,7 @@ extern uint8_t CALIB_LEG_INDEX;
 extern Position3 calib_target_pos;
 extern bool g_motor_power_on;
 extern uint32_t LegControl_round;
+extern bool is_wave;
+
 
 #endif

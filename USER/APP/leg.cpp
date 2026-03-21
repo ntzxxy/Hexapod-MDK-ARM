@@ -36,7 +36,7 @@ void Leg::set_thetas(Thetas theta)
   // 舵机 2 (Tibia): IK角度 + 机械校准偏移 (+3.47度) - Tibia中心偏移 (-85度)
 	float angle_2_cmd = theta.angle[2] + this->cal_offset.angle[2] - TIBIA_CENTER_OFFSET;
 	//串口调试信息
-	/*
+	
 	if (this->huart->Instance == USART1) 
     {
         // 将弧度转换为角度，方便肉眼判断
@@ -47,7 +47,7 @@ void Leg::set_thetas(Thetas theta)
         // 打印格式：[目标] J0(Coxa), J1(Femur), J2(Tibia)
         APP_PRINT("TGT: %.2f, %.2f, %.2f\r\n", deg0, deg1, deg2);
     }
-	*/
+	
 	
 	this->servos[0].set_angle(angle_0_cmd);
 	this->servos[1].set_angle(angle_1_cmd);

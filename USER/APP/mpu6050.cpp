@@ -47,9 +47,15 @@ void MPU_6050::sw_reset()
 void MPU_6050::Read_Gyro()
 {
     this->I2C_Read(MPU6050_GYRO_OUT, receive_buffer, 6);
-    this->gyro_accel.x = receive_buffer[0] << 8 | receive_buffer[1];
-    this->gyro_accel.y = receive_buffer[2] << 8 | receive_buffer[3];
-    this->gyro_accel.z = receive_buffer[4] << 8 | receive_buffer[5];
+    // 1. 原始转换 (int16_t 强转解决 65535 问题)
+    float raw_gx = (float)((int16_t)(receive_buffer[0] << 8 | receive_buffer[1])) / 16.4f;
+    float raw_gy = (float)((int16_t)(receive_buffer[2] << 8 | receive_buffer[3])) / 16.4f;
+    float raw_gz = (float)((int16_t)(receive_buffer[4] << 8 | receive_buffer[5])) / 16.4f;
+
+    // 2. 扣除零点偏移
+    this->gyro_accel.x = raw_gx - this->gyro_offset.x;
+    this->gyro_accel.y = raw_gy - this->gyro_offset.y;
+    this->gyro_accel.z = raw_gz - this->gyro_offset.z;
 }
 
 Position3 MPU_6050::get_angle()
@@ -76,4 +82,22 @@ void MPU_6050::set_gyro_sampling_fre(uint32_t fre)
 void MPU_6050::dmp_get_data()
 {
     atk_ms6050_dmp_get_data(&(this->angle.x), &(this->angle.y), &(this->angle.z));  //换算为弧度制
+}
+
+void MPU_6050::Calibrate_Gyro() {
+    float sum_x = 0, sum_y = 0, sum_z = 0;
+    const int sample_num = 200; // 采集200次求平均值
+
+    for (int i = 0; i < sample_num; i++) {
+        this->Read_Gyro(); // 此时 Read_Gyro 内部还没减去 offset
+        sum_x += this->gyro_accel.x;
+        sum_y += this->gyro_accel.y;
+        sum_z += this->gyro_accel.z;
+        HAL_Delay(5); // 稍微延时
+    }
+    
+    // 计算平均偏移量
+    this->gyro_offset.x = sum_x / (float)sample_num;
+    this->gyro_offset.y = sum_y / (float)sample_num;
+    this->gyro_offset.z = sum_z / (float)sample_num;
 }

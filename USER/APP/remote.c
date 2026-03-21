@@ -2,6 +2,7 @@
 #include "usart.h"
 #include "debug_uart.h"
 #include "string.h"
+#include "auto_control.h"
 
 RC_remote_data_t rc_remote_data;
 uint32_t remote_hock;
@@ -93,6 +94,21 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
         HAL_UARTEx_ReceiveToIdle_DMA(&huart7,
                                      sbus_rx_buf,
                                      SBUS_RX_BUF_LEN);
+    }
+		if (huart->Instance == UART5) {
+        // 1. 先处理当前收到的 Size 长度的数据
+        Process_Raw_Data(rx_buf, Size);
+
+        // 2. 关键：先停止接收，确保 DMA 指针回到 0
+        HAL_UART_AbortReceive(huart); 
+			
+				__HAL_UART_CLEAR_IT(huart, UART_CLEAR_OREF | UART_CLEAR_NEF | UART_CLEAR_FEF | UART_CLEAR_PEF);
+
+        // 3. 清空整个缓冲区，防止下一帧和这一帧的残余数据碰撞
+        memset(rx_buf, 0, sizeof(rx_buf));
+
+        // 4. 重新开启接收
+        HAL_UARTEx_ReceiveToIdle_DMA(huart, rx_buf, sizeof(rx_buf));
     }
 }
 

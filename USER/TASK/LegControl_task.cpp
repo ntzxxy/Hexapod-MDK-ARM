@@ -13,6 +13,8 @@
 #include "mpu6050.h"
 #include "string.h"
 #include "remote.h"
+#include "auto_control.h"
+
 
 #define SAFE_SPEED_X   100.0f   
 #define SAFE_SPEED_Y   100.0f
@@ -22,15 +24,24 @@
 using namespace std;
 
 extern osMessageQId KeyQueueHandle;
+void Hexapod_Show_Wave_Hand(void);
+void Hexapod_Show_Circular_Gyrate(void);
+void Action_Shake_Roll(void);
 ControlMode_t current_mode = MODE_IDLE; // 当前模式，默认空闲
 UIMode_t current_ui_mode = UI_MODE_MOVEMENT;
 RC_remote_data_t rc;
 bool g_motor_power_on = true;
 bool is_remote_active = false;		//遥控器是否使能
+bool is_MPU_ON = false;		//陀螺仪是否使能
+bool is_uart_active = false;		//遥控器是否使能
+
+uint32_t auto_mode_start_tick = 0; // 记录进入自动模式的起始时间
+bool last_uart_active = false;    // 用于检测 is_uart_active 的上升沿
 
 extern void Hexapod_Unload_All(void);
 extern void Hexapod_Load_All(void);
 extern void Hexapod_Read_And_Print_Pose(void);
+
 
 uint8_t CALIB_LEG_INDEX = 3;//校准测试index，对哪条腿进行校准就修改相应的index
 
@@ -39,14 +50,15 @@ Thetas leg_cal_offsets[6] = {
     Thetas(0.0f, 0.0f * PI / 180.0f, -9.8f * PI / 180.0f), 
     
     // Leg 1 (你已经测好的数据)
-		Thetas(0.0f, 0.0f * PI / 180.0f, 7.8f * PI / 180.0f), 
+		Thetas(6.5f * PI / 180.0f, 11.0f * PI / 180.0f, -7.8f * PI / 180.0f), 
 	
     
     // Leg 2-5 (先给0)
-    Thetas(0.0f, -13.0f * PI / 180.0f, 4.8f * PI / 180.0f), 
-    Thetas(12.852f * PI / 180.0f, -3.0f * PI / 180.0f, 5.8f * PI / 180.0f),
-    Thetas(-21.85f * PI / 180.0f, 0.0f, 0.0f),
-    Thetas(12.85f * PI / 180.0f, -3.0f * PI / 180.0f, 0.0f)
+    //Thetas(0.0f, -13.0f * PI / 180.0f, 0.8f * PI / 180.0f), 
+    Thetas(7.852f * PI / 180.0f, -3.0f * PI / 180.0f, -4.8f * PI / 180.0f),
+		Thetas(0.0f * PI / 180.0f, -13.0f * PI / 180.0f, 0.8f * PI / 180.0f),
+    Thetas(-21.85f * PI / 180.0f, -5.0f * PI / 180.0f, -9.0f * PI / 180.0f),
+    Thetas(12.85f * PI / 180.0f, -3.0f * PI / 180.0f, -12.0f * PI / 180.0f)
 };
 
 
@@ -59,6 +71,8 @@ uint8_t dma_buffer_uart1[60];
 uint8_t dma_buffer_uart2[60];
 uint8_t dma_buffer_uart3[60];
 bool is_dirty = false;
+bool is_wave = true;
+
 
 Thetas leg_offset[6]; // 腿部关节角偏移，用于将舵机相对机器人本体的角度换算至相对舵机本身的角度
 // 任务中需要使用的最小化 Leg 结构体实例 (仅代表第一条腿)
@@ -74,6 +88,7 @@ extern Thetas ikine(Position3 &pos);
 
 void key_deal(void);
 void remote_deal(void);
+void auto_control(void);
 
 // ------------------------------------------------------------------
 // --- 3. FreeRTOS 任务入口函数 ---
@@ -91,6 +106,7 @@ extern "C"
 		hexapod.Init();
 		gait_prg.Init();
 		Remote_Init();
+		AutoControl_Init(&huart5);
 		
 		for(int i=0; i<6; i++) 
 		{
@@ -102,9 +118,9 @@ extern "C"
 		
 		static uint32_t code_time_start, code_time_end, code_time; // 用于计算程序运行时间，保证程序隔一段时间跑一遍
 	      
-    uint16_t move_time = 500; 
+    //uint16_t move_time = 500; 
 		
-		uint32_t last_move_tick = 0;
+		//uint32_t last_move_tick = 0;
 		
 		static uint32_t debug_print_tick = 0;
 
@@ -112,11 +128,38 @@ extern "C"
 		{
 						code_time_start = xTaskGetTickCount();
 						key_deal();
+			
+						if (is_uart_active == true && last_uart_active == false) {
+							// 说明刚才按了按键，刚进入 Auto 模式
+							auto_mode_start_tick = xTaskGetTickCount(); // 记下现在的时刻
+							}
+							last_uart_active = is_uart_active; // 更新状态备份
 						if(is_remote_active)
 						{
 							remote_deal();
 						}
+						
+						if(is_uart_active)
+						{
+							if (xTaskGetTickCount() - auto_mode_start_tick < 3000) {
+							velocity.Vx = 0;
+							velocity.Vy = 0;
+							velocity.omega = 0;
+							gait_prg.set_velocity(velocity);
+							}
+							else
+							{
+								//auto_control();
+								velocity.Vx = 0;
+								velocity.Vy = 0; 
+								velocity.omega = 0;
+								gait_prg.set_velocity(velocity);
+								
+							}
+								
+						}
 
+						hexapod.body_angle_cal(rc);		//机身被动式平衡
 						if (xTaskGetTickCount() - debug_print_tick > 1000)
             {
                 debug_print_tick = xTaskGetTickCount();
@@ -158,13 +201,71 @@ extern "C"
 						*/		
             }
             // ==========================================================
-						float raw_vx = hexapod.velocity.Vx;
-						float raw_vy = hexapod.velocity.Vy;
-						bool reverse_round = false;
 						switch (current_mode)
             {
                 case MODE_IDLE:
-                    // 空闲状态，什么都不做，或者发送软力矩指令
+										if(current_ui_mode == UI_MODE_REMOTE)
+										{
+												//static float last_body_z = 0.0f;
+												static Position3 last_angle(0,0,0);
+												static Position3 last_body_pos(0,0,0);
+        
+												// 2. 计算当前目标高度（包含低通滤波）
+												hexapod.body_position_cal(rc); 
+												//float current_body_z = hexapod.body_pos.z;
+											
+												bool is_angle_changing = (abs(hexapod.body_angle.x - last_angle.x) > 0.002f || abs(hexapod.body_angle.y - last_angle.y) > 0.002f  || abs(hexapod.body_pos.y - last_body_pos.y) > 0.5f);
+
+
+												// 3. 变化检测（设置 0.5mm 的死区，过滤传感器的细微噪声）
+												if (abs(hexapod.body_pos.z - last_body_pos.z) > 0.5f || is_angle_changing)
+												{
+														// 更新旧值
+														last_body_pos = hexapod.body_pos;
+														last_angle = hexapod.body_angle;
+
+														// 只有变化时才执行以下高能耗操作
+														LegControl_round = 0; 
+														gait_prg.gait_proggraming(); 
+
+														// 执行移动（指令只在变化时下发一次）
+														// 建议将 move 时间设短一点（如 30ms），增加实时跟随感
+														hexapod.move(50);
+												}
+												osDelay(50);
+										}
+										
+										if(current_ui_mode == UI_MODE_AUTO)
+										{
+												//static float last_body_z = 0.0f;
+												static Position3 last_angle(0,0,0);
+												static Position3 last_body_pos(0,0,0);
+        
+												// 2. 计算当前目标高度（包含低通滤波）
+												hexapod.body_position_cal(rc); 
+												//float current_body_z = hexapod.body_pos.z;
+											
+												bool is_angle_changing = (abs(hexapod.body_angle.x - last_angle.x) > 0.002f || abs(hexapod.body_angle.y - last_angle.y) > 0.002f  || abs(hexapod.body_pos.y - last_body_pos.y) > 0.5f);
+
+
+												// 3. 变化检测（设置 0.5mm 的死区，过滤传感器的细微噪声）
+												if (abs(hexapod.body_pos.z - last_body_pos.z) > 0.5f || is_angle_changing)
+												{
+														// 更新旧值
+														last_body_pos = hexapod.body_pos;
+														last_angle = hexapod.body_angle;
+
+														// 只有变化时才执行以下高能耗操作
+														LegControl_round = 0; 
+														gait_prg.gait_proggraming(); 
+
+														// 执行移动（指令只在变化时下发一次）
+														// 建议将 move 时间设短一点（如 30ms），增加实时跟随感
+														hexapod.move(50);
+												}
+												osDelay(50);
+										}
+										
                     break;
 
                 case MODE_IK_TEST:
@@ -186,23 +287,27 @@ extern "C"
 												is_dirty = false;
 										}
 										break;
-								case MODE_GAIT_RUN:
-										if (raw_vy < 0) reverse_round = !reverse_round;
-										// 如果 vx 为负（左移），反转一次
-										if (raw_vx < 0) reverse_round = !reverse_round;
-										gait_prg.set_velocity(hexapod.velocity);
-										if (!reverse_round) {
-												LegControl_round = (++LegControl_round) % N_POINTS;
-										} else {
-												if (LegControl_round == 0) LegControl_round = N_POINTS - 1;
-												else LegControl_round--;
-										}
+									case MODE_GAIT_RUN:
+												hexapod.body_position_cal(rc);
+									
+												LegControl_round = (++LegControl_round) % N_POINTS; // 控制回合自增长
 								
-										/*步态控制*/
-										gait_prg.CEN_and_pace_cal();
-										gait_prg.gait_proggraming();
-										/*开始移动*/
-										round_time = gait_prg.get_pace_time() / N_POINTS;
+										if(is_wave)
+										{
+											gait_prg.set_velocity(hexapod.velocity);
+											gait_prg.run_wave_gait(); 
+											round_time = gait_prg.get_pace_time() / N_POINTS;
+										}
+										else
+										{
+											gait_prg.set_velocity(hexapod.velocity);
+											/*步态控制*/
+											gait_prg.CEN_and_pace_cal();
+											gait_prg.gait_proggraming();
+											/*开始移动*/
+											round_time = gait_prg.get_pace_time() / N_POINTS;
+										}
+										
 										hexapod.move(round_time);
 										// 计算程序运行时间
 										code_time_end = xTaskGetTickCount();		 // 获取当前systick时间
@@ -210,14 +315,30 @@ extern "C"
 										if (code_time < round_time)
 												osDelay(round_time - code_time); // 保证程序执行周期等于回合时间
 										else
-												osDelay(1); // 至少延时1ms
+												osDelay(20); // 至少延时1ms
+								continue;
+										
+								case MODE_BALANCE_TEST:
+								{
+										// [1] 锁定在站立相位
+										LegControl_round = 0; 
+
+										// [2] 强制重新计算逆运动学 (会将当前的 body_angle 应用到腿部坐标)
+										gait_prg.gait_proggraming(); 
+
+										// [3] 下发指令。move_time 设短一些（如 50-80ms），增加响应灵敏度
+										hexapod.move(100); 
+
+										// [4] 保证循环频率。自平衡需要较高的修正频率（建议 12.5Hz - 20Hz）
+										osDelay(100);
+								}
 								continue;
                 case MODE_RESET_ZERO:
                     // 归零逻辑...
                     break;
             }
 
-			osDelay(20); // 延时 20ms 等待舵机完成动作
+			osDelay(10); // 延时 20ms 等待舵机完成动作
 		}
 	}
 }
@@ -233,8 +354,10 @@ void key_deal(void)
         {
             // 1. 切换 UI 模式 (循环)
             current_ui_mode = (UIMode_t)((current_ui_mode + 1) % UI_MODE_MAX);
+						hexapod.body_pos.z = 0;
 					
 						is_remote_active = false;
+						is_uart_active = false;
 
             // 2. 切换模式时的安全初始化逻辑
             switch (current_ui_mode)
@@ -257,12 +380,19 @@ void key_deal(void)
                     Hexapod_Load_All();       // 确保舵机有劲
 										is_remote_active = true;
 										break;
+								case UI_MODE_BALANCE:
+                    current_mode = MODE_IDLE; // 切回运动模式时，先站好待命
+                    Hexapod_Load_All();       // 确保舵机有劲
+                    break;
+								case UI_MODE_AUTO:
+										current_mode = MODE_IDLE; // 切回运动模式时，先站好待命
+                    Hexapod_Load_All();       // 确保舵机有劲
+										is_uart_active = true;
                 default:
                     break;
             }
             return; // Key1 处理结束，直接返回
         }
-
         // === Key 2/3/4: 上下文功能键 ===
         switch (current_ui_mode)
         {
@@ -272,13 +402,15 @@ void key_deal(void)
                 {
                     case 2: // 功能: 启动行走 (前进)
                         current_mode = MODE_GAIT_RUN;
+												is_wave = false;
                         hexapod.velocity.Vx = 0.0f;
-                        hexapod.velocity.Vy = -30.0f; // 这里的速度可以根据需要调整
-                        hexapod.velocity.omega = 0.2f;
+                        hexapod.velocity.Vy = 30.0f; // 这里的速度可以根据需要调整
+                        hexapod.velocity.omega = 2.0f;
                         break;
                     
                     case 3: // 功能: 原地踏步 (测试步态)
                         current_mode = MODE_GAIT_RUN;
+												is_wave = false;
                         hexapod.velocity.Vx = -30.0f;
                         hexapod.velocity.Vy = 0.0f;
                         hexapod.velocity.omega = 0.04f;
@@ -296,23 +428,28 @@ void key_deal(void)
             case UI_MODE_TEACHING:
                 switch (key_val)
                 {
-                    case 2: // 功能: 掉电 (开始掰腿)
-                        // 安全检查：只有在示教模式下才允许掉电
-                        if(current_mode == MODE_ACTION_TEACH) {
-                            Hexapod_Unload_All(); 
-                        }
+                   case 2: // 功能: 启动行走 (前进)
+                        current_mode = MODE_GAIT_RUN;
+												is_wave = true;
+                        hexapod.velocity.Vx = 0.0f;
+                        hexapod.velocity.Vy = 30.0f; // 这里的速度可以根据需要调整
+                        hexapod.velocity.omega = 0.2f;
                         break;
                     
-                    case 3: // 功能: 读取并打印 (录制一帧)
-                        if(current_mode == MODE_ACTION_TEACH) {
-                            Hexapod_Read_And_Print_Pose();
-                        }
+                    case 3: // 功能: 原地踏步 (测试步态)
+                        current_mode = MODE_GAIT_RUN;
+												is_wave = true;
+                        hexapod.velocity.Vx = -30.0f;
+                        hexapod.velocity.Vy = 0.0f;
+                        hexapod.velocity.omega = 0.04f;
                         break;
                     
-                    case 4: // 功能: 上电 (锁定姿态/结束)
-                        if(current_mode == MODE_ACTION_TEACH) {
-                            Hexapod_Load_All();
-                        }
+                    case 4: // 功能: 停止/恢复站立
+                        current_mode = MODE_IDLE;
+                        hexapod.velocity.Vx = 0;
+                        hexapod.velocity.Vy = 0;
+                        break;
+
                         break;
                 }
                 break;
@@ -339,7 +476,45 @@ void key_deal(void)
 												break;
                 }
                 break;
-                
+								
+						case UI_MODE_BALANCE:
+                 switch (key_val)
+                {
+                    case 2: 
+                    current_mode = MODE_BALANCE_TEST; // 触发动作
+										is_MPU_ON = true;
+                    break;
+
+										case 3: // Z轴 + (抬高腿)
+												break;
+
+										case 4: // 功能: 停止/恢复站立
+                        current_mode = MODE_IDLE;
+												is_MPU_ON = false;
+                        break;
+                }
+                break;
+								
+						case UI_MODE_SHOW: // 假设在遥控/演示模式下
+								switch (key_val)
+								{
+										case 2: // 按键 2 启动演示
+												Hexapod_Show_Wave_Hand();
+												break;
+										case 3: // 按下 3 号键开启“圆周摆动”
+												Hexapod_Show_Circular_Gyrate();
+												break;
+										case 4:
+												Action_Shake_Roll();
+												osDelay(100); // 动作切换缓冲
+												Position3 reset_pos(0,0,0);
+												gait_prg.set_body_rotate_angle(reset_pos);
+												hexapod.move(1000);
+												break;
+								}
+								break;
+								
+					
             default:
                 break;
         }
@@ -352,8 +527,8 @@ void Hexapod::Init(void)
 {
 	legs[0] = Leg(&huart1, 0, 4); // Leg 1: ID 0, Servo 1-3
   legs[1] = Leg(&huart1, 1, 1); // Leg 2: ID 1, Servo 4-6
-	legs[2] = Leg(&huart2, 2, 1); // Leg 3: ID 2, Servo 1-3
-  legs[3] = Leg(&huart2, 3, 4); // Leg 4: ID 3, Servo 4-6
+	legs[2] = Leg(&huart2, 2, 4); // Leg 3: ID 2, Servo 1-3
+  legs[3] = Leg(&huart2, 3, 1); // Leg 4: ID 3, Servo 4-6
 	legs[4] = Leg(&huart3, 4, 1); // Leg 5: ID 4, Servo 1-3
   legs[5] = Leg(&huart3, 5, 4); // Leg 6: ID 5, Servo 4-6
 	MX_USART1_UART_Init();
@@ -389,8 +564,8 @@ void Hexapod::starting_pose()
     }
     
     // 2. 发送站立角度 (注意：这里用的是你的宏定义)
-    float std_femur = 40.0f * PI / 180.0f;   
-    float std_tibia = -110.0f * PI / 180.0f; 
+    float std_femur = 50.0f * PI / 180.0f;   
+    float std_tibia = -120.0f * PI / 180.0f; 
 
     for(int i=0; i<6; i++) {
         // 计算目标角度：标准站立姿态 - 修正后的偏移量
@@ -428,81 +603,97 @@ void Hexapod::velocity_cal(const RC_remote_data_t &remote_data)
 
 void Hexapod::body_position_cal(const RC_remote_data_t &remote_data)
 {
-	if (this->mode == HEXAPOD_LOCK) 
+		if (current_ui_mode == UI_MODE_REMOTE) 
     {
-        // 锁定趴下
-        this->body_pos.z = -90.0f;
-        this->body_pos.x = 0;
-        this->body_pos.y = 0;
+        // HT-10A 原始数据范围约 192~1792，减去 992 得到 -800~800 [cite: 23, 27]
+        float raw_offset = (float)remote_data.knob_VRA; // remote.c 已处理过减法 
+        
+        // 映射到 +/- 25mm。注意：2.4G 遥控器上电瞬间如果没信号，
+        // 你的 remote.c 会返回 zero_data，此时 raw_offset 为 0，高度保持 -74mm 不会乱动 
+        float z_offset = raw_offset / 800.0f * 75.0f;
+			
+				this->body_pos.y = (float)remote_data.knob_VRB / 800.0f * 40.0f;
+				value_limit(this->body_pos.y, HEXAPOD_MIN_Y, HEXAPOD_MAX_Y); // 加上限幅
+        
+        // 安全红线限制
+        value_limit(z_offset, -35.0f, 75.0f);
+        this->body_pos.z = z_offset;
     }
-	else
-	{
-		if(this->mode == HEXAPOD_MOVE)
-		{
-		float height_offset = (float)remote_data.left_VETC / 800.0f * 50.0f; // +/- 50mm
-    body_pos.z = -90.0f + height_offset;
-		body_pos.x = 0;
-    body_pos.y = 0;
-		}
-		else if (this->mode == HEXAPOD_BODY_ANGEL_CONTROL) // 若是身体位置控制模式则计算xy位置
-		{
-		body_pos.z = -90.0f;//暂时固定，后续修改  
-		// body_pos.y += ROTATE_BODY_POS_SENSI * remote_data.right_VETC;
-		// body_pos.x += ROTATE_BODY_POS_SENSI * remote_data.right_HRZC;
-		body_pos.y = HEXAPOD_MAX_Y/800.0f * remote_data.right_VETC;
-		body_pos.x = -HEXAPOD_MIN_X/800.0f * remote_data.right_HRZC;
-		} 
-	}  
-	//限制数值
-	value_limit(body_pos.z, HEXAPOD_MIN_HEIGHT, HEXAPOD_MAX_HEIGHT);
-	value_limit(body_pos.y, HEXAPOD_MIN_Y, HEXAPOD_MAX_Y);
-	value_limit(body_pos.x, HEXAPOD_MIN_X, HEXAPOD_MAX_X);
-	//一阶低通滤波
-	body_pos.y = body_angle_fof[1].cal(body_pos.y);
-	body_pos.x = body_angle_fof[2].cal(body_pos.x);
-	gait_prg.set_body_position(body_pos);
+		else if (current_ui_mode == UI_MODE_AUTO) 
+    {
+        // HT-10A 原始数据范围约 192~1792，减去 992 得到 -800~800 [cite: 23, 27]
+        float raw_offset = (float)auto_data.body_h; // remote.c 已处理过减法 
+        
+        // 映射到 +/- 25mm。注意：2.4G 遥控器上电瞬间如果没信号，
+        // 你的 remote.c 会返回 zero_data，此时 raw_offset 为 0，高度保持 -74mm 不会乱动 
+
+        float z_offset = raw_offset;
+    
+        // 安全红线限制
+        value_limit(z_offset, -35.0f, 75.0f);
+        this->body_pos.z = z_offset;
+    }
+    else 
+    {
+        // 非遥控模式下，高度偏移回归 0
+        this->body_pos.z = 0;
+    }
+
+    // [5] 低通滤波：确保升降过程丝滑，保护舵机
+    this->body_pos.z = body_pos_fof[0].cal(this->body_pos.z);
+		this->body_pos.y = body_pos_fof[1].cal(this->body_pos.y);
+
+    // [6] 同步更新：让步态算法感知新的高度基准
+    gait_prg.set_body_position(this->body_pos);
 }
 
 void Hexapod::body_angle_cal(const RC_remote_data_t &remote_data)
 {
-	mpu_angle = mpu6050.get_angle();			  // 获取陀螺仪角度
-	if (this->mode != HEXAPOD_BODY_ANGEL_CONTROL) // 若不是姿态控制模式则直接返回
-		return;
-	if (this->mpu_flag == false && this->mpu_sw == MPU_ON) // 第一次进入陀螺仪模式
-	{
-		this->mpu_angle_set = this->mpu_angle; // 将设定角度等于陀螺仪角度
-		this->mpu_flag = true;				   // 标志位置1
-	}
-	if (this->mpu_sw == MPU_OFF) // 不是陀螺仪模式则标志位置零
-		this->mpu_flag = false;
-	if (this->mpu_sw == MPU_ON)
-	{
-		mpu_angle_set.x -= ROTATE_BODY_ANGLE_SENSI * remote_data.left_VETC;
-		mpu_angle_set.y += ROTATE_BODY_ANGLE_SENSI * remote_data.left_HRZC;
-		//mpu_angle_set.z += ROTATE_BODY_ANGLE_SENSI * remote_data.right_HRZC;
-		// body_angle.x = this->mpu_angle.x;
-		// body_angle.y = this->mpu_angle.y;
-		// float mpu_x_add = mpu_angle_set.x - mpu_angle.x;
-		// float mpu_y_add = mpu_angle_set.y - mpu_angle.y;
-		body_angle.x += this->mpu_pid_x.cal(mpu_angle.x, mpu_angle_set.x);
-		body_angle.y -= this->mpu_pid_y.cal(mpu_angle.y, mpu_angle_set.y);
-		// body_angle.x = this->mpu_angle.x + this->mpu_pid_x.cal(mpu_angle.x, mpu_angle_set.x);
-		// body_angle.y = this->mpu_angle.y - this->mpu_pid_y.cal(mpu_angle.y, mpu_angle_set.y);
-		// body_angle.z += (mpu_angle_set.z - mpu_angle.z); //陀螺仪z轴零漂严重，暂时不使用
-	}
-	else
-	{
-		body_angle.x = body_angle_fof[0].cal(-0.001f * remote_data.left_VETC);
-		body_angle.y = body_angle_fof[1].cal(-0.001f * remote_data.left_HRZC);
-		//body_angle.z = body_angle_fof[2].cal(0.001f * remote_data.right_HRZC);
-		body_angle.z = 0;
-	} 
-	value_limit(body_angle.x, HEXAPOD_MIN_X_ROTATE, HEXAPOD_MAX_X_ROTATE);
-	value_limit(body_angle.y, HEXAPOD_MIN_Y_ROTATE, HEXAPOD_MAX_Y_ROTATE);
-	value_limit(body_angle.z, HEXAPOD_MIN_Z_ROTATE, HEXAPOD_MAX_Z_ROTATE);
+    // 1. 获取当前欧拉角（转换为弧度）
+    float cur_x_rad = mpu6050.angle.x * (PI / 180.0f); // Pitch
+    float cur_y_rad = mpu6050.angle.y * (PI / 180.0f); // Roll
+    
+    // 2. 获取目标角度（弧度）
+    float set_x_rad = mpu_angle_set.x * (PI / 180.0f);
+    float set_y_rad = mpu_angle_set.y * (PI / 180.0f);
 
+    if (is_MPU_ON) 
+    {
+        // --- 新增：死区处理逻辑 ---
+        // 定义死区角度（例如：0.5度），将其转为弧度
+        const float dead_zone_rad = 0.5f * (PI / 180.0f); 
+        
+        // 计算当前偏差
+        float diff_x = set_x_rad - cur_x_rad;
+        float diff_y = set_y_rad - cur_y_rad;
 
-	gait_prg.set_body_rotate_angle(body_angle);
+        // 如果偏差在死区范围内，强制让当前值等于目标值，使 PID 输出为 0
+        float input_cur_x = cur_x_rad;
+        float input_cur_y = cur_y_rad;
+
+        if (abs(diff_x) < dead_zone_rad) input_cur_x = set_x_rad; 
+        if (abs(diff_y) < dead_zone_rad) input_cur_y = set_y_rad;
+        // -----------------------
+
+        // 3. 计算 PID
+        // 传入经过死区处理后的“当前值”
+        body_angle.x = this->mpu_pid_x.cal(input_cur_x, set_x_rad); 
+        body_angle.y = -this->mpu_pid_y.cal(input_cur_y, set_y_rad); 
+    }
+    else 
+    {
+        this->mpu_flag = false;
+        body_angle.x = 0;
+        body_angle.y = 0;
+        body_angle.z = 0;
+    }
+
+    // 4. 限幅
+    value_limit(body_angle.x, HEXAPOD_MIN_X_ROTATE, HEXAPOD_MAX_X_ROTATE);
+    value_limit(body_angle.y, HEXAPOD_MIN_Y_ROTATE, HEXAPOD_MAX_Y_ROTATE);
+
+    // 5. 同步给步态算法
+    gait_prg.set_body_rotate_angle(body_angle);
 }
 
 /*
@@ -554,26 +745,103 @@ void Hexapod::mode_select(const RC_remote_data_t &remote_data)
 
 void remote_deal(void)
 {
-   // 1. 读取数据
     rc = Remote_read_data();
+		static int16_t last_mode_sw = 0;
+	
+		if (last_mode_sw == 2 && rc.mode_sw != 2)
+    {
+        // 1. 强制清零目标角度
+        hexapod.body_angle.x = 0.0f;
+        hexapod.body_angle.y = 0.0f;
+        gait_prg.set_body_rotate_angle(hexapod.body_angle);
+        
+        LegControl_round = 0; 
+        gait_prg.gait_proggraming(); 
+
+        for(int i=0; i<6; i++) {
+            hexapod.legs[i].set_time(1000); 
+        }
+
+        hexapod.move(1000); 
+
+        osDelay(1000); 
+
+        hexapod.body_angle_fof[0].cal(0.0f);
+        hexapod.body_angle_fof[1].cal(0.0f);
+    }
+    last_mode_sw = rc.mode_sw; // 更新模式记录
 
     // 2. 简单的死区处理 (防止手抖)
-    float dead_zone = 20.0f; 
-    
+    float dead_zone = 220.0f; 
+    if(rc.mode_sw == 3)
+		{
+			is_wave = false;
+		}
+		else if(rc.mode_sw == 1)
+		{
+			is_wave = true;
+		}
+		else if(rc.mode_sw == 2)
+		{
+			is_wave = false;
+			if ( rc.left_VETC > dead_zone || rc.left_VETC < -dead_zone)
+            hexapod.body_angle.x += (float)rc.left_VETC * ROTATE_BODY_ANGLE_SENSI; // 累加式
+        
+        if ( rc.left_HRZC > dead_zone || rc.left_HRZC < -dead_zone)
+            hexapod.body_angle.y -= (float)rc.left_HRZC * ROTATE_BODY_ANGLE_SENSI;
+
+        // 严格限幅保护
+        value_limit(hexapod.body_angle.x, HEXAPOD_MIN_X_ROTATE, HEXAPOD_MAX_X_ROTATE);
+        value_limit(hexapod.body_angle.y, HEXAPOD_MIN_Y_ROTATE, HEXAPOD_MAX_Y_ROTATE);
+        
+        // 更新到算法中
+        gait_prg.set_body_rotate_angle(hexapod.body_angle);
+		}
+		
+		if(rc.mpu_sw == 0)
+		{
+			is_MPU_ON = false;
+		}
+		else if(rc.mpu_sw == 1)
+		{
+			is_MPU_ON = true;
+		}
+		if(rc.gait_sw == 0)
+		{
+			gait_prg.is_obstacle_mode = false;
+		}
+		else if(rc.gait_sw == 1)
+		{
+			gait_prg.is_obstacle_mode = true;
+		}
+		
     // 3. 计算输入速度 (直接映射)
-    // 这里的 0.1f 和 -0.0005f 是你的速度系数，按需调整
     float input_Vy    = 0.0f; // 前后
     float input_Vx    = 0.0f; // 左右
 		float input_Omega = 0.0f;
-    if (rc.right_VETC > 220 || rc.right_VETC < -dead_zone) 
-        input_Vy = (float)rc.right_VETC * 0.07f; 
+		if(rc.mode_sw != 2)
+		{
+			if (rc.right_VETC > dead_zone || rc.right_VETC < -dead_zone) 
+        input_Vy = (float)rc.right_VETC * 0.05f; 
         
-    if (rc.right_HRZC > 220 || rc.right_HRZC < -dead_zone) 
-        input_Vx = (float)rc.right_HRZC * 0.07f;
-		
-		if (rc.left_HRZC > dead_zone || rc.left_HRZC < -220) 
-        input_Omega = (float)rc.left_HRZC * 0.07f;
-
+			if (rc.right_HRZC > dead_zone || rc.right_HRZC < -dead_zone) 
+					input_Vx = (float)rc.right_HRZC * 0.05f;
+			
+			if (rc.left_HRZC > dead_zone || rc.left_HRZC < -dead_zone) 
+					input_Omega = (float)rc.left_HRZC * 0.05f;
+			
+			 hexapod.body_angle.x = hexapod.body_angle_fof[0].cal(0.0f);
+       hexapod.body_angle.y = hexapod.body_angle_fof[1].cal(0.0f);
+		}
+    else if(rc.mode_sw == 2)
+		{
+			if (rc.right_VETC > dead_zone || rc.right_VETC < -dead_zone) 
+        input_Vy = (float)rc.right_VETC * 0.05f; 
+			
+			if (rc.right_HRZC > dead_zone || rc.right_HRZC < -dead_zone) 
+				input_Omega = (float)rc.right_HRZC * 0.05f;
+			
+		}
 		
     // 4. 核心逻辑：完全模仿按键
     if (input_Vx == 0 && input_Vy == 0 && input_Omega == 0)
@@ -594,26 +862,115 @@ void remote_deal(void)
         hexapod.velocity.Vx = input_Vx;
         hexapod.velocity.Vy = input_Vy;
 
-        if (input_Vy != 0) 
-        {
-            // 前进或后退时，固定补偿 0.2f
-            hexapod.velocity.omega = 0.2f; 
-        }
-        else if (input_Vx != 0) 
-        {
-            // 纯左右横移时，固定补偿 0.04f
-            hexapod.velocity.omega = 0.04f;
-        }
-				else
-				{
-						hexapod.velocity.omega = -input_Omega;
-				}
+       
+				hexapod.velocity.omega = -input_Omega;
+				
         // 为了防止万一Z是0导致趴下，加这一句最保险
         // 如果你确信按键模式下Z没问题，这行删了也行，但留着绝对没坏处
         //hexapod.body_pos.z = -90.0f; 
     }
 }
 
+void auto_control(void)
+{
+		static int16_t last_mode_sw = 0;
+	
+		if (last_mode_sw == 2 && auto_data.mode_sw != 2)
+    {
+        // 1. 强制清零目标角度
+        hexapod.body_angle.x = 0.0f;
+        hexapod.body_angle.y = 0.0f;
+        gait_prg.set_body_rotate_angle(hexapod.body_angle);
+        
+        LegControl_round = 0; 
+        gait_prg.gait_proggraming(); 
+
+        for(int i=0; i<6; i++) {
+            hexapod.legs[i].set_time(1000); 
+        }
+
+        hexapod.move(1000); 
+
+        osDelay(1000); 
+
+        hexapod.body_angle_fof[0].cal(0.0f);
+        hexapod.body_angle_fof[1].cal(0.0f);
+    }
+    last_mode_sw = auto_data.mode_sw; // 更新模式记录
+
+    // 2. 简单的越线处理 (防止超速)
+    float safe_zone = 40.0f; 
+    if(auto_data.mode_sw == 3)
+		{
+			is_wave = false;
+		}
+		else if(auto_data.mode_sw == 1)
+		{
+			is_wave = true;
+		}
+		
+		if(auto_data.gait_sw == 0)
+		{
+			gait_prg.is_obstacle_mode = false;
+		}
+		else if(auto_data.gait_sw == 1)
+		{
+			gait_prg.is_obstacle_mode = true;
+		}
+		
+    // 3. 计算输入速度 (直接映射)
+    float input_Vy    = 0.0f; // 前后
+    float input_Vx    = 0.0f; // 左右
+		float input_Omega = 0.0f;
+		if(auto_data.mode_sw != 2)
+		{
+			if (auto_data.vy_raw < safe_zone || auto_data.vy_raw > -safe_zone) 
+        input_Vy = (float)auto_data.vy_raw; 
+      else if (auto_data.vy_raw > safe_zone || auto_data.vy_raw < -safe_zone) 
+				input_Vy = 0;
+			
+			if (auto_data.vx_raw < safe_zone || auto_data.vx_raw > -safe_zone) 
+					input_Vx = (float)auto_data.vx_raw;
+			else if (auto_data.vx_raw > safe_zone || auto_data.vx_raw < -safe_zone)  
+					input_Vx = 0;
+			
+			if (auto_data.w_raw < safe_zone || auto_data.w_raw > -safe_zone) 
+					input_Omega = (float)auto_data.w_raw;
+			else if (auto_data.w_raw > safe_zone || auto_data.w_raw < -safe_zone)  
+					input_Omega = 0;
+			
+			 hexapod.body_angle.x = hexapod.body_angle_fof[0].cal(0.0f);
+       hexapod.body_angle.y = hexapod.body_angle_fof[1].cal(0.0f);
+		}
+   
+		
+    // 4. 核心逻辑：完全模仿按键
+    if (input_Vx == 0 && input_Vy == 0 && input_Omega == 0)
+    {
+        // === 没推摇杆 = 按下 Key 4 (停止) ===
+        current_mode = MODE_IDLE;
+        
+        hexapod.velocity.Vx = 0;
+        hexapod.velocity.Vy = 0;
+        hexapod.velocity.omega = 0;
+    }
+    else
+    {
+        // === 推了摇杆 = 按下 Key 2 (行走) ===
+        current_mode = MODE_GAIT_RUN;
+
+        // 赋值速度
+        hexapod.velocity.Vx = input_Vx;
+        hexapod.velocity.Vy = input_Vy;
+
+       
+				hexapod.velocity.omega = -input_Omega;
+				
+        // 为了防止万一Z是0导致趴下，加这一句最保险
+        // 如果你确信按键模式下Z没问题，这行删了也行，但留着绝对没坏处
+        //hexapod.body_pos.z = -90.0f; 
+    }
+}
 
 
 /*
@@ -732,4 +1089,157 @@ void Hexapod_Read_And_Print_Pose(void)
         osDelay(5); 
     }
     
+}
+
+void Hexapod_Show_Wave_Hand(void)
+{
+    Thetas theta_cmd;
+    
+    // --- 步骤 1: 抬起手臂 (Leg 0) ---
+    // 目标：Coxa=0, Femur=75°, Tibia=-90°
+    theta_cmd.angle[0] = 0.0f;
+    theta_cmd.angle[1] = 75.0f * PI / 180.0f;
+    theta_cmd.angle[2] = -70.0f * PI / 180.0f;
+    
+    hexapod.legs[0].set_thetas(theta_cmd);
+    hexapod.legs[0].set_time(1000); // 1秒平滑抬起
+    hexapod.legs[0].move_UART();
+    osDelay(1200); // 等待动作到位
+    for(int i = 0; i < 3; i++)
+    {
+        theta_cmd.angle[0] = 13.0f * PI / 180.0f;
+        hexapod.legs[0].set_thetas(theta_cmd);
+        hexapod.legs[0].set_time(800); // 往一个方向走 0.8s
+        hexapod.legs[0].move_UART();
+        osDelay(900);
+        
+        theta_cmd.angle[0] = -13.0f * PI / 180.0f;
+        hexapod.legs[0].set_thetas(theta_cmd);
+        hexapod.legs[0].set_time(800);
+        hexapod.legs[0].move_UART();
+        osDelay(900);
+    }
+    
+    // 回正第一关节
+    theta_cmd.angle[0] = 0.0f;
+    hexapod.legs[0].set_thetas(theta_cmd);
+    hexapod.legs[0].set_time(400);
+    hexapod.legs[0].move_UART();
+    osDelay(500);
+
+    for(int j = 0; j < 2; j++)
+    {
+        // 勾向 -110°
+        theta_cmd.angle[2] = -90.0f * PI / 180.0f;
+        hexapod.legs[0].set_thetas(theta_cmd);
+        hexapod.legs[0].set_time(600); // 勾一下 0.6s
+        hexapod.legs[0].move_UART();
+        osDelay(700);
+        
+        // 回到 -90°
+        theta_cmd.angle[2] = -70.0f * PI / 180.0f;
+        hexapod.legs[0].set_thetas(theta_cmd);
+        hexapod.legs[0].set_time(600);
+        hexapod.legs[0].move_UART();
+        osDelay(700);
+    }
+
+    hexapod.starting_pose(); 
+}
+
+void Hexapod_Show_Circular_Gyrate(void)
+{
+    Position3 dance_angle(0.0f, 0.0f, 0.0f); 
+    float dance_time = 0.0f;
+    const float dt = 0.025f;      // 25ms 刷新频率
+    const float period = 4.0f;     // 4秒转一圈
+    const float amplitude = 0.10f; // 摆动幅度约 6 度
+
+    // 运行两周：2周 * 4秒 / 0.025s = 320次循环
+    for(uint32_t i = 0; i < 320; i++) 
+    {
+        dance_time += dt;
+        float omega = 2.0f * PI / period;
+
+        dance_angle.y = amplitude * sin(omega * dance_time); // Roll
+        dance_angle.x = amplitude * cos(omega * dance_time); // Pitch
+
+        gait_prg.set_body_rotate_angle(dance_angle); 
+        
+        LegControl_round = 0; 
+        gait_prg.gait_proggraming(); 
+
+        hexapod.move(30); 
+
+        osDelay(25);
+    }
+
+    // 动作复位
+    dance_angle.x = 0; 
+		dance_angle.y = 0; 
+		dance_angle.z = 0;
+    gait_prg.set_body_rotate_angle(dance_angle);
+    hexapod.move(1000); 
+    osDelay(1000);
+}
+
+void Action_Shake_Roll(void) {
+    Position3 shake_angle; // 定义一个位置/角度结构体
+    const float amp = 5.0f * PI / 180.0f; 
+    
+    for(int i = 0; i < 40; i++) {
+        // 计算 Roll 角度
+        float angle_y = amp * sin(2.0f * 2.0f * PI * (i * 0.025f)); 
+        
+        // 显式给成员赋值，避免构造函数报错
+        shake_angle.x = 0.0f;
+        shake_angle.y = angle_y;
+        shake_angle.z = 0.0f;
+        
+        gait_prg.set_body_rotate_angle(shake_angle); // 下发角度
+        LegControl_round = 0; // 锁定支撑相
+        gait_prg.gait_proggraming(); // 执行逆运动学
+        hexapod.move(25); // 移动指令
+        osDelay(25);
+    }
+}
+
+void Action_Shake_Pitch(void) {
+    Position3 shake_angle; 
+    float current_time = 0.0f;
+    const float dt = 0.025f;       // 保持 25ms 一帧 (40Hz)
+    const float amplitude = 0.087f; // 幅度：约 5 度 (弧度制)
+    
+    // --- 修改速度看这里 ---
+    const float freq = 2.0f;       // 2.0 代表 1 秒 2 个来回。改成 1.0 则变慢。
+    const float duration = 1.0f;    // 持续时间：1 秒
+    int total_steps = (int)(duration / dt); // 计算总步数 (40步)
+
+    for(int i = 0; i < total_steps; i++) {
+        current_time = i * dt;
+        
+        // 计算当前时刻的 Pitch 角度
+        float angle_x = amplitude * sin(2.0f * PI * freq * current_time);
+        
+        // 显式赋值，防止 Position3 构造函数报错
+        shake_angle.x = angle_x;
+        shake_angle.y = 0.0f;
+        shake_angle.z = 0.0f;
+        
+        // 1. 设置角度
+        gait_prg.set_body_rotate_angle(shake_angle);
+        // 2. 锁定步态相位
+        LegControl_round = 0;
+        // 3. 逆运动学计算
+        gait_prg.gait_proggraming();
+        // 4. 下发指令 (注意：move 的参数最好等于或略大于 dt，保证平滑)
+        hexapod.move(25);
+        
+        osDelay(25); 
+    }
+
+    // 动作收尾，缓慢归零
+    shake_angle.x = 0;
+    gait_prg.set_body_rotate_angle(shake_angle);
+    hexapod.move(200);
 }

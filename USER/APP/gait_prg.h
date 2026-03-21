@@ -12,9 +12,9 @@
 #define CHASSIS_WIDTH 161.5f      // 底盘宽度（x轴方向）
 #define CHASSIS_FRONT_WIDTH 93.3f // 底盘前端宽度（x轴方向）
 
-#define N_POINTS 100                      // 点的数量（必须是偶数）
-#define THETA_STAND_2 40.0f / 180.0f * PI // 机械腿站立时最后两个关节的角度
-#define THETA_STAND_3 -110.0f / 180.0f * PI
+#define N_POINTS 50                      // 点的数量（必须是偶数）
+#define THETA_STAND_2 50.0f / 180.0f * PI // 机械腿站立时最后两个关节的角度
+#define THETA_STAND_3 -120.0f / 180.0f * PI
 
 #define K_CEN 500.0f     // 用于确定圆心模长的系数
 #define KR_1 1           //%用于计算步伐大小的系数
@@ -22,10 +22,10 @@
 #define MAX_R_PACE 60.0f // 最大步伐半径
 #define MAX_SPEED 0.3f * 660
 
-#define MIN_Z_PACE 15.0f
+#define MIN_Z_PACE 10.0f
 
 #define MAX_JOINT2_RAD PI / 2.0f          // 第2关节最大弧度
-#define MIN_JOINT2_RAD -0.1f * PI         // 第2关节最小弧度
+#define MIN_JOINT2_RAD -0.5f * PI         // 第2关节最小弧度
 #define MAX_JOINT3_RAD -(1.0f / 6.0f) * PI // 第3关节最大弧度
 #define MIN_JOINT3_RAD -(7.0f / 9.0f) * PI // 第3关节最小弧度
 
@@ -62,6 +62,7 @@ private:
     float move_point();
 public:
     action actions[6];
+		bool is_obstacle_mode;
     void Init(); // 初始化
     void CEN_and_pace_cal();
     void gait_proggraming();
@@ -70,6 +71,7 @@ public:
     void set_body_rotate_angle(Position3 &rotate_angle);
     void set_body_position(Position3 &body_pos);
     void set_velocity(Velocity &velocity);
+		void run_wave_gait(); // 新增：波浪步态规划
 };
 
 Thetas ikine(Position3 &pos);
