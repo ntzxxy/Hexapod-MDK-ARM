@@ -97,15 +97,9 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     }
 		if (huart->Instance == UART5) {
         // 1. 先处理当前收到的 Size 长度的数据
+			
         Process_Raw_Data(rx_buf, Size);
 
-        // 2. 关键：先停止接收，确保 DMA 指针回到 0
-        HAL_UART_AbortReceive(huart); 
-			
-				__HAL_UART_CLEAR_IT(huart, UART_CLEAR_OREF | UART_CLEAR_NEF | UART_CLEAR_FEF | UART_CLEAR_PEF);
-
-        // 3. 清空整个缓冲区，防止下一帧和这一帧的残余数据碰撞
-        memset(rx_buf, 0, sizeof(rx_buf));
 
         // 4. 重新开启接收
         HAL_UARTEx_ReceiveToIdle_DMA(huart, rx_buf, sizeof(rx_buf));
@@ -173,5 +167,25 @@ void SBUS_Parse_Frame(uint8_t *frame)
 			remote_hock = 0; // 喂狗，表示通信正常
 			}
 	
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    // 1) 先停掉 DMA，避免带着错误状态继续跑
+    HAL_UART_DMAStop(huart);
+
+    // 2) 清 UART 常见错误标志
+    __HAL_UART_CLEAR_OREFLAG(huart);
+    __HAL_UART_CLEAR_NEFLAG(huart);
+    __HAL_UART_CLEAR_FEFLAG(huart);
+    __HAL_UART_CLEAR_PEFLAG(huart);
+
+   
+    if (huart->Instance == UART5)
+    {
+        memset(rx_buf, 0, sizeof(rx_buf));
+        HAL_UARTEx_ReceiveToIdle_DMA(huart, rx_buf, sizeof(rx_buf));
+        __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+    }
 }
 

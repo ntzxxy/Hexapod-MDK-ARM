@@ -172,7 +172,7 @@ void Gait_prg::CEN_and_pace_cal()
 		}
     else
 		{
-					this->pace_time = 3000;
+					this->pace_time = 1000;
 		}
 }
 

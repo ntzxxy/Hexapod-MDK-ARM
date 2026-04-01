@@ -20,10 +20,11 @@ typedef struct {
 // 供外部调用的接口
 void AutoControl_Init(UART_HandleTypeDef *huart);
 void Process_Raw_Data(uint8_t *data, uint16_t len);
+void AutoControl_Report(void);
 
 
 extern AutoControl_t auto_data;
-extern uint8_t rx_buf[20];
+extern uint8_t rx_buf[40];
 
 #ifdef __cplusplus
 }

@@ -141,22 +141,31 @@ extern "C"
 						
 						if(is_uart_active)
 						{
-							if (xTaskGetTickCount() - auto_mode_start_tick < 3000) {
-							velocity.Vx = 0;
-							velocity.Vy = 0;
-							velocity.omega = 0;
-							gait_prg.set_velocity(velocity);
+							if ((HAL_GetTick() - auto_data.last_tick) > 1500)
+							{
+									velocity.Vx = 0;
+									velocity.Vy = 0;
+									velocity.omega = 0;
+									gait_prg.set_velocity(velocity);
 							}
 							else
 							{
-								//auto_control();
-								velocity.Vx = 0;
-								velocity.Vy = 0; 
-								velocity.omega = 0;
-								gait_prg.set_velocity(velocity);
-								
+									if (xTaskGetTickCount() - auto_mode_start_tick < 10000) {
+									velocity.Vx = 0;
+									velocity.Vy = 0;
+									velocity.omega = 0;
+									gait_prg.set_velocity(velocity);
+									}
+									else
+									{
+										auto_control();
+										//velocity.Vx = 0;
+										//velocity.Vy = 0; 
+										//velocity.omega = 0;
+										//gait_prg.set_velocity(velocity);								
+									}
 							}
-								
+								AutoControl_Report();
 						}
 
 						hexapod.body_angle_cal(rc);		//机身被动式平衡
